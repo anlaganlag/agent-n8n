@@ -1,0 +1,974 @@
+{
+  "name": "n8n Coding Agent MVP",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "1",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1640,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const workflowRoot = '/Users/randy/Documents/code/agent-n8n';\nconst now = new Date();\nconst timestamp = now.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);\nreturn [{\n  json: {\n    task: {\n      id: `task-${timestamp}`,\n      title: 'Add validation to create user endpoint',\n      requirement: 'Reject invalid email input and return 400 with error message',\n      acceptance_criteria: [\n        'invalid email returns 400',\n        'valid email still creates user',\n        'existing tests continue to pass'\n      ],\n      file_hints: [\n        'src/routes/users.ts',\n        'tests/users.test.ts'\n      ]\n    },\n    config: {\n      repo_path: '/absolute/path/to/target-repo',\n      default_branch: 'main',\n      branch_prefix: 'agent/',\n      workspace_lock_file: '.agent-run.lock',\n      test_command: 'pnpm test',\n      allowed_test_commands: ['pnpm test'],\n      test_timeout_seconds: 300,\n      max_repair_attempts: 2,\n      max_changed_files: 5,\n      max_diff_lines: 400,\n      context_file_limit: 6,\n      max_file_lines_for_context: 1000,\n      edit_format: 'search_replace',\n      fallback_edit_format: 'unified_diff',\n      search_replace_context_lines: 3,\n      prefer_targeted_tests_from_hints: false,\n      allowed_failure_types: ['lint', 'type', 'unit_test', 'syntax', 'import']\n    },\n    run: {\n      repair_attempts: 0,\n      status: 'running'\n    },\n    workflow_root: workflowRoot,\n    prompts: {\n      plan: `${workflowRoot}/prompts/plan.md`,\n      patch: `${workflowRoot}/prompts/patch.md`,\n      repair: `${workflowRoot}/prompts/repair.md`,\n      summary: `${workflowRoot}/prompts/summary.md`\n    },\n    scripts: {\n      check_repo: `${workflowRoot}/scripts/check_repo.sh`,\n      collect_context: `${workflowRoot}/scripts/collect_context.sh`,\n      apply_patch: `${workflowRoot}/scripts/apply_patch.sh`,\n      run_tests: `${workflowRoot}/scripts/run_tests.sh`,\n      summarize_result: `${workflowRoot}/scripts/summarize_result.sh`,\n      release_lock: `${workflowRoot}/scripts/release_lock.sh`\n    }\n  }\n}];"
+      },
+      "id": "2",
+      "name": "Initialize Run Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1420,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst payload = {\n  repo_path: item.config.repo_path,\n  default_branch: item.config.default_branch,\n  branch_prefix: item.config.branch_prefix,\n  workspace_lock_file: item.config.workspace_lock_file,\n  task_id: item.task.id,\n  test_command: item.config.test_command,\n  allowed_test_commands: item.config.allowed_test_commands\n};\nconst shellPayload = JSON.stringify(payload).replace(/'/g, `'\\\\''`);\nreturn [{ json: { ...item, command: `${item.scripts.check_repo} '${shellPayload}'` } }];"
+      },
+      "id": "3",
+      "name": "Build Check Repo Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{$json.command}}"
+      },
+      "id": "4",
+      "name": "Check Repo",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -980,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst result = JSON.parse(item.stdout || '{}');\nreturn [{ json: { ...item, precheck: result, run: { ...item.run, branch_name: result.branch_name || item.run.branch_name }, artifacts: { ...(item.artifacts || {}), check_repo_raw: result } } }];"
+      },
+      "id": "5",
+      "name": "Parse Check Repo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -760,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.precheck.ok}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "6",
+      "name": "Precheck OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -540,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst payload = {\n  repo_path: item.config.repo_path,\n  file_hints: item.task.file_hints,\n  context_file_limit: item.config.context_file_limit,\n  max_file_lines_for_context: item.config.max_file_lines_for_context\n};\nconst shellPayload = JSON.stringify(payload).replace(/'/g, `'\\\\''`);\nreturn [{ json: { ...item, command: `${item.scripts.collect_context} '${shellPayload}'` } }];"
+      },
+      "id": "7",
+      "name": "Build Collect Context Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -320,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{$json.command}}"
+      },
+      "id": "8",
+      "name": "Collect Context",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        -100,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst result = JSON.parse(item.stdout || '{}');\nreturn [{ json: { ...item, context: result, artifacts: { ...(item.artifacts || {}), context_raw: result } } }];"
+      },
+      "id": "9",
+      "name": "Parse Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst fileBlock = JSON.stringify(item.context.selected_files || [], null, 2);\nconst skippedBlock = JSON.stringify(item.context.skipped_files || [], null, 2);\nconst prompt = `You are working inside one existing repository.\\n\\nTask title:\\n${item.task.title}\\n\\nRequirement:\\n${item.task.requirement}\\n\\nAcceptance criteria:\\n${(item.task.acceptance_criteria || []).join('\\n')}\\n\\nRepository summary:\\n${item.context.repo_summary || ''}\\n\\nRelevant files:\\n${fileBlock}\\n\\nSkipped files:\\n${skippedBlock}\\n\\nReturn JSON with:\\n- task_understanding\\n- target_files\\n- change_strategy\\n- risks\\n- should_stop\\n- stop_reason`;\nreturn [{ json: { ...item, prompt, llm_stage: 'plan' } }];"
+      },
+      "id": "10",
+      "name": "Build Plan Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        340,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LLM_API_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $env.LLM_MODEL || 'gpt-4.1-mini', input: $json.prompt } }}"
+      },
+      "id": "11",
+      "name": "Generate Plan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        560,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst body = item.body || item;\nconst text = body.output_text || body.choices?.[0]?.message?.content || body.content?.[0]?.text || '{}';\nlet plan;\ntry {\n  plan = typeof text === 'string' ? JSON.parse(text) : text;\n} catch (error) {\n  plan = { should_stop: true, stop_reason: `plan parse failed: ${error.message}`, raw_text: text };\n}\nreturn [{ json: { ...item, plan } }];"
+      },
+      "id": "12",
+      "name": "Parse Plan Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.plan.should_stop}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "13",
+      "name": "Plan Says Stop?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst relevantFiles = JSON.stringify(item.context.selected_files || [], null, 2);\nconst prompt = `Implement the task in the repository below.\\n\\nTask understanding:\\n${item.plan.task_understanding || ''}\\n\\nAcceptance criteria:\\n${(item.task.acceptance_criteria || []).join('\\n')}\\n\\nRelevant files:\\n${relevantFiles}\\n\\nRules:\\n- Return SEARCH/REPLACE blocks only\\n- Use this exact block format:\\n  ===FILE:path/to/file===\\n  <<<<<<< SEARCH\\n  old text\\n  =======\\n  new text\\n  >>>>>>> REPLACE\\n- Each SEARCH block must match exactly once in the target file\\n- Include enough surrounding context to make the match unique\\n- Modify only necessary files\\n- Keep changes small\\n- Do not add deploy logic\\n- Do not rewrite unrelated code`;\nreturn [{ json: { ...item, prompt, llm_stage: 'patch' } }];"
+      },
+      "id": "14",
+      "name": "Build Edit Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LLM_API_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $env.LLM_MODEL || 'gpt-4.1-mini', input: $json.prompt } }}"
+      },
+      "id": "15",
+      "name": "Generate Edit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1440,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst body = item.body || item;\nconst text = body.output_text || body.choices?.[0]?.message?.content || body.content?.[0]?.text || '';\nreturn [{ json: { ...item, artifacts: { ...(item.artifacts || {}), latest_edit_text: text }, edit_text: text } }];"
+      },
+      "id": "16",
+      "name": "Parse Edit Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst payload = {\n  repo_path: item.config.repo_path,\n  edit_format: item.config.edit_format,\n  edit_text: item.edit_text,\n  search_replace_context_lines: item.config.search_replace_context_lines,\n  max_changed_files: item.config.max_changed_files,\n  max_diff_lines: item.config.max_diff_lines\n};\nconst shellPayload = JSON.stringify(payload).replace(/'/g, `'\\\\''`);\nreturn [{ json: { ...item, command: `${item.scripts.apply_patch} '${shellPayload}'` } }];"
+      },
+      "id": "17",
+      "name": "Build Apply Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{$json.command}}"
+      },
+      "id": "18",
+      "name": "Apply Edit",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2100,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst apply = JSON.parse(item.stdout || '{}');\nreturn [{ json: { ...item, apply } }];"
+      },
+      "id": "19",
+      "name": "Parse Apply Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2320,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.apply.applied}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "20",
+      "name": "Apply OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        2540,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst payload = {\n  repo_path: item.config.repo_path,\n  test_command: item.config.test_command,\n  allowed_test_commands: item.config.allowed_test_commands,\n  test_timeout_seconds: item.config.test_timeout_seconds,\n  prefer_targeted_tests_from_hints: item.config.prefer_targeted_tests_from_hints,\n  file_hints: item.task.file_hints,\n  allowed_failure_types: item.config.allowed_failure_types\n};\nconst shellPayload = JSON.stringify(payload).replace(/'/g, `'\\\\''`);\nreturn [{ json: { ...item, command: `${item.scripts.run_tests} '${shellPayload}'` } }];"
+      },
+      "id": "21",
+      "name": "Build Test Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{$json.command}}"
+      },
+      "id": "22",
+      "name": "Run Tests",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        2980,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst test = JSON.parse(item.stdout || '{}');\nreturn [{ json: { ...item, test } }];"
+      },
+      "id": "23",
+      "name": "Parse Test Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3200,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.test.passed}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "24",
+      "name": "Tests Passed?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3420,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst canRepair = Boolean(item.test.repairable) && Number(item.run.repair_attempts || 0) < Number(item.config.max_repair_attempts || 0);\nreturn [{ json: { ...item, can_repair: canRepair } }];"
+      },
+      "id": "25",
+      "name": "Evaluate Repair",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3640,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.can_repair}}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "26",
+      "name": "Can Repair?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3860,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nreturn [{ json: { ...item, run: { ...item.run, repair_attempts: Number(item.run.repair_attempts || 0) + 1 } } }];"
+      },
+      "id": "27",
+      "name": "Increment Repair Count",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst prompt = `The previous code edit did not pass tests.\\n\\nAcceptance criteria:\\n${(item.task.acceptance_criteria || []).join('\\n')}\\n\\nCurrent changed files:\\n${JSON.stringify(item.apply.changed_files || [], null, 2)}\\n\\nTest failure type:\\n${item.test.failure_type || ''}\\n\\nTest failure excerpt:\\n${item.test.output_excerpt || ''}\\n\\nCurrent diff:\\n${item.artifacts?.diff_excerpt || ''}\\n\\nRules:\\n- Return SEARCH/REPLACE blocks only\\n- Use the same exact block format as the initial patch prompt\\n- Fix only the observed failure\\n- Keep changes minimal\\n- Do not touch unrelated files\\n- Only use the latest failure excerpt provided here`;\nreturn [{ json: { ...item, prompt, llm_stage: 'repair' } }];"
+      },
+      "id": "28",
+      "name": "Build Repair Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4300,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.LLM_API_URL}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $env.LLM_MODEL || 'gpt-4.1-mini', input: $json.prompt } }}"
+      },
+      "id": "29",
+      "name": "Generate Repair Edit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4520,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst body = item.body || item;\nconst text = body.output_text || body.choices?.[0]?.message?.content || body.content?.[0]?.text || '';\nreturn [{ json: { ...item, edit_text: text, artifacts: { ...(item.artifacts || {}), latest_edit_text: text } } }];"
+      },
+      "id": "30",
+      "name": "Parse Repair Edit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4740,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst payload = { repo_path: item.config.repo_path };\nif (item.precheck?.lock_file) {\n  payload.lock_file = item.precheck.lock_file;\n}\nconst shellPayload = JSON.stringify(payload).replace(/'/g, `'\\\\''`);\nreturn [{ json: { ...item, command: `${item.scripts.summarize_result} '${shellPayload}'` } }];"
+      },
+      "id": "31",
+      "name": "Build Summarize Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3640,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{$json.command}}"
+      },
+      "id": "32",
+      "name": "Summarize Result",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        3860,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst summary = JSON.parse(item.stdout || '{}');\nconst status = item.test?.passed ? 'success' : (item.plan?.should_stop || item.precheck?.ok === false || item.apply?.applied === false ? 'stopped' : 'failed');\nreturn [{ json: { ...item, summary, final: { status, summary: item.plan?.task_understanding || item.task.title, changed_files: summary.changed_files || [], repair_attempts: item.run.repair_attempts || 0, test_result: item.test || null, stop_reason: item.plan?.stop_reason || item.precheck?.stop_reason || item.apply?.stop_reason || item.test?.output_excerpt || '' } } }];"
+      },
+      "id": "33",
+      "name": "Build Final Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4080,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst shellPayload = JSON.stringify({ lock_file: item.precheck?.lock_file || '' }).replace(/'/g, `'\\\\''`);\nreturn [{ json: { ...item, command: `${item.scripts.release_lock} '${shellPayload}'` } }];"
+      },
+      "id": "34",
+      "name": "Build Release Lock Command",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4300,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "command": "={{$json.command}}"
+      },
+      "id": "35",
+      "name": "Release Lock",
+      "type": "n8n-nodes-base.executeCommand",
+      "typeVersion": 1,
+      "position": [
+        4520,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nreturn [{ json: item.final || { status: 'stopped', stop_reason: 'final payload missing' } }];"
+      },
+      "id": "36",
+      "name": "Return Final Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4740,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst final = {\n  status: 'stopped',\n  summary: item.task?.title || 'precheck stopped',\n  changed_files: [],\n  repair_attempts: item.run?.repair_attempts || 0,\n  test_result: null,\n  stop_reason: item.precheck?.stop_reason || item.plan?.stop_reason || item.apply?.stop_reason || 'workflow stopped before tests'\n};\nreturn [{ json: { ...item, final } }];"
+      },
+      "id": "37",
+      "name": "Build Stop Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1220,
+        -120
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Initialize Run Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Initialize Run Context": {
+      "main": [
+        [
+          {
+            "node": "Build Check Repo Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Check Repo Command": {
+      "main": [
+        [
+          {
+            "node": "Check Repo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Repo": {
+      "main": [
+        [
+          {
+            "node": "Parse Check Repo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Check Repo": {
+      "main": [
+        [
+          {
+            "node": "Precheck OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Precheck OK?": {
+      "main": [
+        [
+          {
+            "node": "Build Collect Context Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Stop Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Collect Context Command": {
+      "main": [
+        [
+          {
+            "node": "Collect Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Collect Context": {
+      "main": [
+        [
+          {
+            "node": "Parse Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Context": {
+      "main": [
+        [
+          {
+            "node": "Build Plan Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Plan Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Plan": {
+      "main": [
+        [
+          {
+            "node": "Parse Plan Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Plan Response": {
+      "main": [
+        [
+          {
+            "node": "Plan Says Stop?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Plan Says Stop?": {
+      "main": [
+        [
+          {
+            "node": "Build Stop Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Edit Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Edit Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Edit": {
+      "main": [
+        [
+          {
+            "node": "Parse Edit Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Edit Response": {
+      "main": [
+        [
+          {
+            "node": "Build Apply Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Apply Command": {
+      "main": [
+        [
+          {
+            "node": "Apply Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply Edit": {
+      "main": [
+        [
+          {
+            "node": "Parse Apply Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Apply Result": {
+      "main": [
+        [
+          {
+            "node": "Apply OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Apply OK?": {
+      "main": [
+        [
+          {
+            "node": "Build Test Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Stop Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Test Command": {
+      "main": [
+        [
+          {
+            "node": "Run Tests",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Tests": {
+      "main": [
+        [
+          {
+            "node": "Parse Test Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Test Result": {
+      "main": [
+        [
+          {
+            "node": "Tests Passed?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tests Passed?": {
+      "main": [
+        [
+          {
+            "node": "Build Summarize Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Evaluate Repair",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Repair": {
+      "main": [
+        [
+          {
+            "node": "Can Repair?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Can Repair?": {
+      "main": [
+        [
+          {
+            "node": "Increment Repair Count",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Summarize Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Increment Repair Count": {
+      "main": [
+        [
+          {
+            "node": "Build Repair Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Repair Prompt": {
+      "main": [
+        [
+          {
+            "node": "Generate Repair Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Repair Edit": {
+      "main": [
+        [
+          {
+            "node": "Parse Repair Edit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Repair Edit": {
+      "main": [
+        [
+          {
+            "node": "Build Apply Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summarize Command": {
+      "main": [
+        [
+          {
+            "node": "Summarize Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Result": {
+      "main": [
+        [
+          {
+            "node": "Build Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Final Output": {
+      "main": [
+        [
+          {
+            "node": "Build Release Lock Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Release Lock Command": {
+      "main": [
+        [
+          {
+            "node": "Release Lock",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Release Lock": {
+      "main": [
+        [
+          {
+            "node": "Return Final Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Stop Output": {
+      "main": [
+        [
+          {
+            "node": "Build Release Lock Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "b7a4df1a-2d3f-4a84-8f9a-b0a0c3d7e001",
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "agent-n8n-mvp"
+}
