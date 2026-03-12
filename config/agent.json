@@ -1,0 +1,27 @@
+{
+  "repo_path": "/absolute/path/to/target-repo",
+  "default_branch": "main",
+  "branch_prefix": "agent/",
+  "workspace_lock_file": ".agent-run.lock",
+  "test_command": "pnpm test",
+  "allowed_test_commands": [
+    "pnpm test"
+  ],
+  "test_timeout_seconds": 300,
+  "max_repair_attempts": 2,
+  "max_changed_files": 5,
+  "max_diff_lines": 400,
+  "context_file_limit": 6,
+  "max_file_lines_for_context": 1000,
+  "edit_format": "search_replace",
+  "fallback_edit_format": "unified_diff",
+  "search_replace_context_lines": 3,
+  "prefer_targeted_tests_from_hints": false,
+  "allowed_failure_types": [
+    "lint",
+    "type",
+    "unit_test",
+    "syntax",
+    "import"
+  ]
+}
