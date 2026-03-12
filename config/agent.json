@@ -1,11 +1,11 @@
 {
-  "repo_path": "/absolute/path/to/target-repo",
+  "repo_path": "/Users/randy/Documents/code/agent-n8n/demo-repo",
   "default_branch": "main",
   "branch_prefix": "agent/",
   "workspace_lock_file": ".agent-run.lock",
-  "test_command": "pnpm test",
+  "test_command": "npm test",
   "allowed_test_commands": [
-    "pnpm test"
+    "npm test"
   ],
   "test_timeout_seconds": 300,
   "max_repair_attempts": 2,

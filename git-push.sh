@@ -25,9 +25,39 @@ echo ""
 git add -A
 
 # 获取 diff 内容（限制大小避免 token 过多）
-MAX_DIFF_LINES=500
+MAX_DIFF_LINES=300
 DIFF_CONTENT=$(git diff --cached | head -n $MAX_DIFF_LINES)
 DIFF_STAT=$(git diff --cached --stat)
+
+# 调用 Claude API
+call_claude_api() {
+    local prompt="$1"
+    local escaped_prompt=$(echo "$prompt" | jq -Rs .)
+    curl -s https://api.anthropic.com/v1/messages \
+        -H "Content-Type: application/json" \
+        -H "x-api-key: $ANTHROPIC_API_KEY" \
+        -H "anthropic-version: 2023-06-01" \
+        -H "anthropic-dangerous-direct-browser-access: true" \
+        -d "{
+            \"model\": \"claude-sonnet-4-20250514\",
+            \"max_tokens\": 100,
+            \"messages\": [{\"role\": \"user\", \"content\": $escaped_prompt}]
+        }" 2>/dev/null | jq -r '.content[0].text' 2>/dev/null
+}
+
+# 调用 OpenAI API
+call_openai_api() {
+    local prompt="$1"
+    local escaped_prompt=$(echo "$prompt" | jq -Rs .)
+    curl -s https://api.openai.com/v1/chat/completions \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $OPENAI_API_KEY" \
+        -d "{
+            \"model\": \"gpt-4o-mini\",
+            \"max_tokens\": 100,
+            \"messages\": [{\"role\": \"user\", \"content\": $escaped_prompt}]
+        }" 2>/dev/null | jq -r '.choices[0].message.content' 2>/dev/null
+}
 
 # AI 生成 commit 信息
 generate_ai_commit_msg() {
@@ -42,6 +72,7 @@ generate_ai_commit_msg() {
 2. type 只能是: feat, fix, refactor, docs, style, test, chore, perf
 3. description 用中文，不超过 50 字，描述做了什么而非怎么做的
 4. 如果是多个不相关改动，用 "chore: " 开头并列举关键改动
+5. 只输出 commit message，不要代码块或其他内容
 
 示例:
 - feat: 添加用户登录功能
@@ -55,14 +86,21 @@ PROMPT_EOF
     prompt+=$'\n'"$DIFF_STAT"$'\n\n'
     prompt+="git diff (前 $MAX_DIFF_LINES 行):"$'\n'"$DIFF_CONTENT"
 
-    # 调用 claude CLI
-    if command -v claude &> /dev/null; then
-        echo -e "${BLUE}🤖 AI 分析中...${NC}"
-        claude -p "$prompt" --max-tokens 100 2>/dev/null || echo "chore: update files"
+    # 调用 AI API
+    echo -e "${BLUE}🤖 AI 分析中...${NC}" >&2
+
+    local result=""
+    if [[ -n "$ANTHROPIC_API_KEY" ]]; then
+        result=$(call_claude_api "$prompt")
+    elif [[ -n "$OPENAI_API_KEY" ]]; then
+        result=$(call_openai_api "$prompt")
+    fi
+
+    if [[ -n "$result" ]]; then
+        # 清理可能的多余输出（代码块等）
+        echo "$result" | sed 's/^```.*$//g' | sed 's/```//g' | tr -d '\n' | head -c 100
     else
-        # 降级到简单模式
         generate_simple_msg "$extra"
-        return
     fi
 }
 
@@ -92,6 +130,7 @@ if [[ -n "$1" ]]; then
     COMMIT_MSG="$TYPE: $1 - $DESC"
 fi
 
+echo ""
 echo -e "${YELLOW}📝 Commit: ${NC}$COMMIT_MSG"
 echo ""
 
